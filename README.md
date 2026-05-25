@@ -10,9 +10,25 @@ Project page: [https://chkim403.github.io/gs_physics/](https://chkim403.github.i
 
 ## Release Plan
 
-We are preparing the code, dataset, trained models, and instructions for public release.
+We plan to release the following items before CVPR 2026. Current release status:
 
-Everything will be released before CVPR 2026. Please check this repository for updates.
+- [x] Code
+- [ ] Dataset
+- [ ] Instructions
+
+Note: the code requires accompanying data to run. The required data, along with setup and usage instructions, will be released soon.
+
+## License
+This code is released under the MIT License.
+
+## Acknowledgments
+
+The `externals` folder includes code from the following repositories:
+
+- [Dynamic3DGaussian](https://github.com/JonathonLuiten/Dynamic3DGaussians)
+- [Physion](https://github.com/htung0101/Physion-particles)
+- [PointConvFormer](https://github.com/apple/ml-pointconvformer)
+- [RotationContinuity](https://github.com/papagina/RotationContinuity)
 
 ## Citation
 

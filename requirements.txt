@@ -1,0 +1,6 @@
+easydict
+h5py
+scikit-learn
+timm
+vispy
+pykeops
