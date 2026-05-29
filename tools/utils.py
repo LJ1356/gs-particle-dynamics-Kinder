@@ -16,6 +16,7 @@ def get_config(args):
     cfg['pointcloud']['minimum_point_num'] = cfg['pointcloud']['knn'] # set a heuristic minimum point count to keep KNN search valid.
     cfg['output_dir'] = os.path.join(cfg['output_dir'], args.scenario)
     # for additional data loader used when hard_example_mining is enabled
+    cfg['train_hem'] = {}
     cfg['train_hem']['batch_sz'] = cfg['train']['batch_sz']
     cfg['train_hem']['view_num'] = cfg['train']['view_num']
     cfg['train_hem']['num_workers'] = cfg['train']['num_workers']

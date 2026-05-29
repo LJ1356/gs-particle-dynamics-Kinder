@@ -515,7 +515,7 @@ class PointConvStridePE_rel_custom(nn.Module):
         if cfg.BATCH_NORM:
             self.linear = Linear_BN(
                 (out_channel // 4 + last_ch) * weightnet[-1],
-                out_channel // 4
+                out_channel // 4,
                 bn_ver='1d'
             )
         else:

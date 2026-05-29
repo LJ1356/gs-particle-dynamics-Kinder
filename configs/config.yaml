@@ -1,6 +1,5 @@
 exp_dir: 
 exp_name: 
-pretrained_model_chkpt: 
 output_dir: 
 device: cuda
 
@@ -34,8 +33,7 @@ train:
   seq_len: 5 # number of frames in the training sequence (this includes the input frames defined by input_frame_num)
   learning_rate: 0.001
   loss_type: all # all, position, rendering
-  hard_example_mining: false  
-  pretrained: false
+  hard_example_mining: false
   warm_up_epoch: 2
   epoch: 50
   milestones:

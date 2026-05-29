@@ -40,10 +40,6 @@ def build_pointconv_interaction_nets(cfg, phase):
         chkpt = torch.load(model_path)
         model.load_state_dict(chkpt['pointconv_internaction_network'])
         model.eval()
-    
-    if cfg['train']['pretrained'] and phase == 'train':
-        chkpt = torch.load(cfg['pretrained_model_chkpt'])
-        model.load_state_dict(chkpt['pointconv_internaction_network'])
 
     return model.to(cfg['device'])
 
@@ -62,9 +58,6 @@ def build_multi_frame_mlp(cfg, phase):
         chkpt = torch.load(model_path)
         model.load_state_dict(chkpt['predictor'])
         model.eval()
-    if cfg['train']['pretrained'] and phase == 'train':
-        chkpt = torch.load(cfg['pretrained_model_chkpt'])
-        model.load_state_dict(chkpt['predictor'])
 
     return model.to(cfg['device'])
 
