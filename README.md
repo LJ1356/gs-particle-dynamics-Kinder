@@ -91,6 +91,12 @@ point to the processed dataset directory.
 
 Raw dataset details will be provided in [docs/raw_dataset.md](docs/raw_dataset.md).
 
+## Dataset License and Terms of Use
+
+Before downloading or using the datasets, please review the
+[dataset license](docs/dataset_license.md) and
+[dataset terms of use](docs/dataset_terms_of_use.md).
+
 ## How to Run
 
 Before running the code, update `configs/config.yaml` so that `data_dir` points to
