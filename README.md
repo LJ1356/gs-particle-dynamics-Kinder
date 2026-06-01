@@ -80,8 +80,16 @@ initialization or CUDA module-loading commands based on your system.
 
 ## Download Processed Dataset
 
-Download the processed dataset from the link provided here: [TBD]. After downloading, update
-`data_dir` in `configs/config.yaml` to point to the processed dataset directory.
+The released code requires only the processed dataset.
+
+Download the processed dataset from the link provided here: [TBD]. See
+[docs/processed_dataset.md](docs/processed_dataset.md) for the processed dataset structure
+and file descriptions. After downloading, update `data_dir` in `configs/config.yaml` to
+point to the processed dataset directory.
+
+## Raw Dataset
+
+Raw dataset details will be provided in [docs/raw_dataset.md](docs/raw_dataset.md).
 
 ## How to Run
 
