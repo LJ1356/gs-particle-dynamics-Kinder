@@ -14,7 +14,15 @@ def get_config(args):
     cfg['dataset']['scenario'] = args.scenario
     cfg['pointcloud']['downsampling_layer_num'] = len(cfg['pointcloud']['grid_size'])
     cfg['pointcloud']['minimum_point_num'] = cfg['pointcloud']['knn'] # set a heuristic minimum point count to keep KNN search valid.
+
+    # create output dir only if it doesn't exist
+    if not os.path.exists(cfg['output_dir']):
+        os.makedirs(cfg['output_dir'])
     cfg['output_dir'] = os.path.join(cfg['output_dir'], args.scenario)
+    # create scenario-specific output dir only if it doesn't exist
+    if not os.path.exists(cfg['output_dir']):
+        os.makedirs(cfg['output_dir'])
+    
     # for additional data loader used when hard_example_mining is enabled
     cfg['train_hem'] = {}
     cfg['train_hem']['batch_sz'] = cfg['train']['batch_sz']

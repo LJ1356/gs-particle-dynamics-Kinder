@@ -1,6 +1,6 @@
-exp_dir: 
-exp_name: 
-output_dir: 
+exp_dir: path/to/checkpoints
+exp_name: your_experiment_name
+output_dir: path/to/rollout_outputs
 device: cuda
 
 model:
@@ -49,7 +49,7 @@ test:
 
 dataset:
   name: real_world_collision
-  data_dir: 
+  data_dir: path/to/processed_dataset
   gravity_axis: 2 # depends on the dataset. Currently, z coordinate in [x, y, z]
   max_object_num: 11
   camera_num: 4

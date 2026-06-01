@@ -5,7 +5,6 @@ import os
 import math
 import json
 import copy
-import cv2
 from PIL import Image
 from pytorch3d.structures import Pointclouds
 from scipy.spatial.transform import Rotation as R
