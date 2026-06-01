@@ -14,7 +14,7 @@ We plan to release the following items before CVPR 2026. Current release status:
 
 - [x] Code
 - [x] Instructions
-- [ ] Processed Dataset
+- [x] Processed Dataset
 - [ ] Raw Dataset
 - [ ] Visualization Code
 
@@ -82,7 +82,8 @@ initialization or CUDA module-loading commands based on your system.
 
 The released code requires only the processed dataset.
 
-Download the processed dataset from the link provided here: [TBD]. See
+Download the processed dataset from the link provided here:
+[Dropbox](https://www.dropbox.com/scl/fo/duwh81qrc3bnt3p5sao39/ABWBa-LPFX9Fd-aqCKtEsf0?rlkey=waf3pg6xp6ywsnlewo4r8ihln&e=1&dl=0). See
 [docs/processed_dataset.md](docs/processed_dataset.md) for the processed dataset structure
 and file descriptions. After downloading, update `data_dir` in `configs/config.yaml` to
 point to the processed dataset directory.
