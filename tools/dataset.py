@@ -119,10 +119,8 @@ class Dataset(torch.utils.data.Dataset):
 
         # skip scenes that are not included in the dataset release
         if cfg['dataset']['scenario'] == 'bowling':
-            assert cfg['dataset']['raw_dataset_dir'].split('/')[-1] == "real_world_kubric_20251011"
             skip_list = [13, 48, 50, 127, 128, 130, 141]
         elif cfg['dataset']['scenario'] == 'cube_stacks':
-            assert cfg['dataset']['raw_dataset_dir'].split('/')[-1] == "real_world_kubric_20250731"
             skip_list = [36, 72, 74, 75, 78, 81, 82, 83, 105, 106, 124, 130, 131, 133, 161, 162, 163, 174, 191, 193, 208, 234]
         else:
             raise NotImplementedError
@@ -144,12 +142,12 @@ class Dataset(torch.utils.data.Dataset):
 
         if phase == "train" or phase == "test":
             n_trials = len(trial_names)
-            self.all_trials += [os.path.join(self.data_dir, trial_name) for trial_name in trial_names]
+            self.all_trials += [os.path.join(self.data_dir, trial_name, "gs") for trial_name in trial_names]
             self.n_rollout += n_trials
             self.mean_time_step = self.cfg[phase]['frames_per_scene'] if phase == "train" else 1
         elif phase == "train_hem":
             # For HEM, I specify the full path including a frame number rather than randomly sampling a frame
-            scene_folders = [os.path.join(self.data_dir, trial_name) for trial_name in trial_names]
+            scene_folders = [os.path.join(self.data_dir, trial_name, "gs") for trial_name in trial_names]
             for scene_folder in scene_folders:
                 frame_path = os.listdir(scene_folder)
                 frame_path = [int(d) for d in frame_path if 'done' not in d]
@@ -172,7 +170,7 @@ class Dataset(torch.utils.data.Dataset):
         if self.phase == "train" or self.phase == "test":
             idx = idx % self.n_rollout
             trial_dir = self.all_trials[idx]
-            trial_fullname = trial_dir.split("/")[-1]
+            trial_fullname = trial_dir.split("/")[-2]
 
             frame_list = os.listdir(trial_dir)
             frame_list = [int(d) for d in frame_list if 'done' not in d]
@@ -199,21 +197,19 @@ class Dataset(torch.utils.data.Dataset):
             data_path = os.path.join(trial_dir, str(timestep_sel))
         else:
             data_path = self.all_trials[idx]
-            trial_fullname = data_path.split("/")[-2]
+            trial_fullname = data_path.split("/")[-3]
             timestep_sel = int(data_path.split("/")[-1])
             trial_dir = data_path.rsplit('/', 1)[0]
 
         # the "train" folder below is from GS optimiztaion, which produces input guassians 
-        params = dict(np.load(os.path.join(data_path, "train", "params_coarse.npz")))
-        id_data = dict(np.load(os.path.join(data_path, "train", "gs_soft_ids_coarse.npz"), allow_pickle=True))
+        params = dict(np.load(os.path.join(data_path, "params_coarse.npz")))
+        id_data = dict(np.load(os.path.join(data_path, "gs_soft_ids_coarse.npz"), allow_pickle=True))
         pose_data = self._get_pose_data(trial_fullname, timestep_sel)
         gs_soft_ids = id_data['gaussian_ids_to_object_ids']
         obj_id_to_color = id_data['obj_id_to_color']        
         gs_ids = np.expand_dims(np.sum(np.sum(gs_soft_ids, axis=-1), axis=-1), axis=-1)    
 
-        gt_path = self._get_gt_path(data_path)
-
-        with open(os.path.join(gt_path, 'train_meta.json'), 'r') as f:    
+        with open(os.path.join(self.data_dir, trial_fullname, 'camera_meta.json'), 'r') as f:    
             md = json.load(f)  # metadata
         
         idx_sel = self._get_foreground_idx(gs_ids)
@@ -241,16 +237,14 @@ class Dataset(torch.utils.data.Dataset):
             # params, rot, inv_rot = self.rotate_scene(params, azimuth, seq_len + self.lookahead_frames)  
 
         last_frame_ind = seq_len - 1
-        gt = self._get_dataset(last_frame_ind, md, gt_path, inv_rot)
+        gt_frame = timestep_sel + last_frame_ind
+        gt = self._get_dataset(trial_fullname, gt_frame, md, inv_rot)
            
         # load more future frames
         gt_lookahead = []
-        for i in range(self.lookahead_frames):
-            data_path = os.path.join(trial_dir, str(timestep_sel + (i + 1)))
-            gt_path = self._get_gt_path(data_path)
-            with open(os.path.join(gt_path, 'train_meta.json'), 'r') as f:
-                md = json.load(f)  # metadata
-            gt_lookahead.append(self._get_dataset(last_frame_ind, md, gt_path, inv_rot))
+        for i in range(self.lookahead_frames): # metadata
+            gt_frame = timestep_sel + (i + 1) + last_frame_ind
+            gt_lookahead.append(self._get_dataset(trial_fullname, gt_frame, md, inv_rot))
 
         example = {}
         ct = 0
@@ -455,7 +449,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def _get_pose_data(self, scene_num, frame_num):
 
-        scene_path = os.path.join(self.cfg['dataset']['raw_dataset_dir'], scene_num)
+        scene_path = os.path.join(self.data_dir, scene_num, 'obj_poses')
         cameras = os.listdir(scene_path)
         pose_data = {}
         pose_data_error = {}
@@ -525,15 +519,6 @@ class Dataset(torch.utils.data.Dataset):
 
         return params, gs_soft_id
 
-    def _get_gt_path(self, data_path):
-        
-        gt_path = data_path.replace(
-            'dynamic_4dgs_interaction_network_training_data_real_world',
-            'dynamic_4dgs_training_data_real_world'
-        )
-
-        return gt_path
-
     def _rotate_scene(self, params, azimuth, seq_len):
         
         neg_azimuth = - azimuth
@@ -567,9 +552,9 @@ class Dataset(torch.utils.data.Dataset):
 
         return params, rot, inv_rot
 
-    def _get_dataset(self, t, md, gt_path, rot):
+    def _get_dataset(self, scene_name, t_sel, md, rot):
         view_sel = np.random.choice(
-            np.arange(len(md['fn'][t])),
+            np.arange(self.cfg['dataset']['camera_num']),
             self.cfg[self.phase]['view_num'],
             replace=False
         )
@@ -584,13 +569,13 @@ class Dataset(torch.utils.data.Dataset):
         for sel_idx in range(view_sel.shape[0]):
             rot_aug = np.eye(4)
             rot_aug[:3, :3] = rot
-            w2c_tmp = np.stack(md['w2c'][t][sel_idx])
+            w2c_tmp = np.stack(md['w2c'][sel_idx])
             w2c_tmp = np.matmul(w2c_tmp, rot_aug)
             w2c = w2c_tmp.tolist()
-            k = md['k'][t][sel_idx]
-            fn = md['fn'][t][sel_idx]
-            im_path = os.path.join(gt_path, 'ims', fn)
-            seg_path = os.path.join(gt_path, 'seg', fn.replace('.jpg', '.png'))
+            k = md['k'][sel_idx]
+            cam_id = md['cam_id'][sel_idx]
+            im_path = os.path.join(self.data_dir, scene_name, 'rgb', cam_id, f"{t_sel:05d}.png")
+            seg_path = os.path.join(self.data_dir, scene_name, 'seg', cam_id, f"{t_sel:05d}.png")
             im = np.array(copy.deepcopy(Image.open(im_path)))
             seg = np.array(copy.deepcopy(Image.open(seg_path))).astype(np.float32)
             seg = seg * 255
@@ -598,7 +583,7 @@ class Dataset(torch.utils.data.Dataset):
             im = torch.tensor(im).float().permute(2, 0, 1) / 255
             seg = torch.tensor(seg).float()
             seg = seg / 255
-            z_depth = im
+            z_depth = im # currently not using depth, so putting dummy here for now
             # I don't use background gaussians so I don't need the last column
             # seg_col = torch.stack((seg, torch.zeros_like(seg), 1 - seg))   
             seg_col = torch.stack((seg, torch.zeros_like(seg), torch.zeros_like(seg)))

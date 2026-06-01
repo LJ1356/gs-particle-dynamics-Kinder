@@ -50,7 +50,6 @@ test:
 dataset:
   name: real_world_collision
   data_dir: 
-  raw_dataset_dir: 
   gravity_axis: 2 # depends on the dataset. Currently, z coordinate in [x, y, z]
   max_object_num: 11
   camera_num: 4
