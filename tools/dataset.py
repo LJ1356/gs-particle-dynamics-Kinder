@@ -126,7 +126,7 @@ class Dataset(torch.utils.data.Dataset):
             raise NotImplementedError
    
         trial_names_all = os.listdir(self.data_dir)
-        scene_folders = [os.path.join(self.data_dir, trial_name) for trial_name in trial_names_all if int(trial_name.split('_')[1]) not in skip_list]
+        scene_folders = [os.path.join(self.data_dir, trial_name, "gs") for trial_name in trial_names_all if int(trial_name.split('_')[1]) not in skip_list]
         trial_names = []
         for scene_folder in scene_folders:
             frame_path = os.listdir(scene_folder)
@@ -136,9 +136,9 @@ class Dataset(torch.utils.data.Dataset):
             end_frame = int(frame_path[-1])
             # filter out scenes that don't have enough frames to look ahead 
             if end_frame - self.lookahead_frames < start_frame:
-                print(scene_folder.split("/")[-1] + " doesn't have enough frames to look ahead, skipping...")
+                print(scene_folder.split("/")[-2] + " doesn't have enough frames to look ahead, skipping...")
                 continue
-            trial_names.append(scene_folder.split("/")[-1])
+            trial_names.append(scene_folder.split("/")[-2])
 
         if phase == "train" or phase == "test":
             n_trials = len(trial_names)
