@@ -48,12 +48,12 @@ Follow these steps to set up the environment and install the required packages:
 2. Install PyTorch3D.
    ```bash
    pip install iopath scikit-image matplotlib imageio plotly opencv-python fvcore
-   pip install "git+https://github.com/facebookresearch/pytorch3d.git@v0.7.8"
+   pip install "git+https://github.com/facebookresearch/pytorch3d.git@V0.7.8"
    ```
 
 3. Install gsplat.
    ```bash
-   pip install gsplat==1.4.0
+   pip install git+https://github.com/nerfstudio-project/gsplat.git@v1.4.0
    ```
 
 4. Clone this repository:
