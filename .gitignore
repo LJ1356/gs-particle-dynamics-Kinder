@@ -143,3 +143,9 @@ results/models/
 .ninja_log
 build.ninja
 *.o
+
+# Generated outputs
+checkpoints/
+data/
+rollout_outputs/
+materials/
