@@ -1,6 +1,6 @@
-exp_dir: path/to/checkpoints
-exp_name: your_experiment_name
-output_dir: path/to/rollout_outputs
+exp_dir: /home/liang/claude/gs-particle-dynamics/checkpoints
+exp_name: bowling_run1
+output_dir: /home/liang/claude/gs-particle-dynamics/rollout_outputs
 device: cuda
 
 model:
@@ -26,10 +26,10 @@ pointcloud:
   scaling: 10.0 # scaling factor for the input point cloud.
     
 train:
-  batch_sz: 12
+  batch_sz: 48
   view_num: 4
   frames_per_scene: 10 # number of frames to sample from each scene in an epoch
-  num_workers: 6
+  num_workers: 4
   seq_len: 5 # number of frames in the training sequence (this includes the input frames defined by input_frame_num)
   learning_rate: 0.001
   loss_type: all # all, position, rendering
@@ -49,7 +49,7 @@ test:
 
 dataset:
   name: real_world_collision
-  data_dir: path/to/processed_dataset
+  data_dir: /home/liang/claude/gs-particle-dynamics/data/processed_data
   gravity_axis: 2 # depends on the dataset. Currently, z coordinate in [x, y, z]
   max_object_num: 11
   camera_num: 4

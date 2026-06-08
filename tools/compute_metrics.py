@@ -50,28 +50,28 @@ def visualize(sequence, exp_name, scenario_name, output_root, chamfer_gt_root, d
     
     A = pred_means[-4]
 
-    fourdgs_dir = f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/"
+    fourdgs_dir = f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/gs/"
     smallest_frame, highest_frame = get_min_max_dir(Path(fourdgs_dir))
     smallest_frame = smallest_frame[0]
     highest_frame = highest_frame[0]
 
-    B = np.load(f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/{highest_frame}/train/params_coarse.npz")
+    B = np.load(f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/gs/{highest_frame}/params_coarse.npz")
     B = torch.tensor(B["means3D"][0])
 
     # compute chamfer using entire point clouds (not object-wise)
     assert (pred_means.shape[0] - 3) == (highest_frame - smallest_frame + 1 - 3)
     chamfer = chamfer_dist(A, B).item()
-    means = np.load(f"{delta_gt_root}/{scenario_name}/means3D_{sequence}/means3D.npz")
-    A = torch.tensor(means["means3D"][-1]) # not sure why the key is different here 20
+    gt_params = np.load(f"{output_root}/{exp_name}/{sequence}/params_gt.npz")
+    A = torch.tensor(gt_params["means3D"][-1])
     B = pred_means[-1]
 
     # compute delta metrics
     good_count, total_num = avg_delta(B, A, [0.05, 0.1, 0.2])
 
-    B = np.load(f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/{highest_frame}/train/params_coarse.npz")
+    B = np.load(f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/gs/{highest_frame}/params_coarse.npz")
     gt_means3D = B["means3D"][0]
 
-    gt_obj_id = np.load(f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/{highest_frame}/train/gs_soft_ids_coarse.npz")
+    gt_obj_id = np.load(f"{chamfer_gt_root}/{scenario_name}/test/{sequence}/gs/{highest_frame}/gs_soft_ids_coarse.npz")
     gs_soft_ids = gt_obj_id['gaussian_ids_to_object_ids']
     gs_ids = np.expand_dims(np.sum(np.sum(gs_soft_ids, axis=-1), axis=-1), axis=-1)
     idx_sel = np.squeeze(gs_ids != 0.0, axis=-1)
@@ -79,12 +79,6 @@ def visualize(sequence, exp_name, scenario_name, output_root, chamfer_gt_root, d
     gt_means3D = torch.tensor(gt_means3D[idx_sel])
     gt_obj_ids = get_one_hot_by_majority_vote_numpy_ver(gs_soft_ids)
     gt_obj_ids = torch.tensor(np.argmax(gt_obj_ids, axis=1))
-
-    pred_obj_ids = means['obj_ids']
-    pred_obj_ids = torch.tensor(np.argmax(pred_obj_ids, axis=1))
-    pred_means3D = pred_means[-4]
-
-    assert pred_obj_ids.shape[0] == pred_means3D.shape[0]
 
     return chamfer, good_count, total_num
 

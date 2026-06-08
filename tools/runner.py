@@ -40,10 +40,7 @@ class Model_Runner(object):
         exp_folder = os.path.join(self.cfg['exp_dir'], self.cfg['exp_name'])
         out_folder = os.path.join(exp_folder, 'epoch_%02d' % cur_epoch)
         out_file_path = os.path.join(out_folder, 'model.pt')
-        if not os.path.isdir(exp_folder):
-            os.mkdir(exp_folder)
-        if not os.path.isdir(out_folder):
-            os.mkdir(out_folder)
+        os.makedirs(out_folder, exist_ok=True)
 
         torch.save(
             {'epoch': cur_epoch,
