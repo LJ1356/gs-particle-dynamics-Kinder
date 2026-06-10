@@ -38,7 +38,11 @@ def build_pointconv_interaction_nets(cfg, phase):
     if phase == 'test':        
         model_path = os.path.join(cfg['exp_dir'], cfg['exp_name'], 'epoch_%02d/model.pt' % cfg['epoch_sel'])
         chkpt = torch.load(model_path)
-        model.load_state_dict(chkpt['pointconv_internaction_network'])
+        state_dict = chkpt['pointconv_internaction_network']
+        state_dict = {k.replace('object_modeling_blocks', 'object_modeling')
+                       .replace('interaction_modeling_blocks', 'interaction_modeling'): v
+                      for k, v in state_dict.items()}
+        model.load_state_dict(state_dict)
         model.eval()
 
     return model.to(cfg['device'])

@@ -1,5 +1,5 @@
-exp_dir: /home/liang/claude/gs-particle-dynamics/checkpoints
-exp_name: bowling_run1
+exp_dir: /home/liang/claude/gs-particle-dynamics/checkpoints/checkpoints_Chanho
+exp_name: full_dataset_rollout5
 output_dir: /home/liang/claude/gs-particle-dynamics/rollout_outputs
 device: cuda
 

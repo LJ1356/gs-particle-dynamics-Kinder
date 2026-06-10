@@ -49,8 +49,9 @@ test:
 
 dataset:
   name: mujoco_sweep
-  data_dir: /home/liang/claude/kindergarden/hdf5_data/sweep_canonical_10d_nocamera.hdf5
-  gravity_axis: 2      # z is up in MuJoCo world frame
-  max_object_num: 102  # one per geom (matches adapt_mujoco_hdf5.py object ID count)
-  camera_num: 1        # dummy — no real cameras, but needed for feature dim calculation
-  pts_per_geom: 50     # subsample canonical 500 pts → 50 per geom (102*50=5100 total)
+  data_dir: /home/liang/claude/kindergarden/hdf5_data/sweep_canonical_10d_nocamera_50demos.hdf5
+  gravity_axis: 2
+  object_id_mode: "part"  # options: "geom" (63 IDs), "part" (19 IDs), "parent" (9 IDs)
+  max_object_num: 19       # must match object_id_mode: part=19, parent=9, geom=63
+  camera_num: 1            # dummy — no real cameras, needed for feature dim calculation
+  pts_per_geom: 50         # subsample 500 → 50 pts/geom; 63 geoms × 50 = 3150 pts/frame
