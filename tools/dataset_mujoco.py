@@ -344,9 +344,16 @@ class MuJoCoDataset(torch.utils.data.Dataset):
         positions, geom_ids, part_ids, parent_ids, demo_name = self.all_trials[trial_idx]
         T = positions.shape[0]
 
-        max_start = T - self.frames_needed
-        start = np.random.randint(0, max_start + 1) if self.phase == 'train' else 0
-        window = positions[start: start + self.frames_needed]
+        if self.phase == 'test':
+            # full-trajectory autoregressive rollout: 3 input frames, predict frames 3..T-1
+            start = 0
+            window = positions
+            num_gt = T - 3
+        else:
+            max_start = T - self.frames_needed
+            start = np.random.randint(0, max_start + 1)
+            window = positions[start: start + self.frames_needed]
+            num_gt = 1 + self.lookahead_frames
 
         camera_num    = self.cfg['dataset']['camera_num']
         max_object_num = self.cfg['dataset']['max_object_num']
@@ -371,7 +378,7 @@ class MuJoCoDataset(torch.utils.data.Dataset):
                 example['nn_idx'] = nn_idx
 
         gt_positions, gt_rotations = [], []
-        for k in range(1 + self.lookahead_frames):
+        for k in range(num_gt):
             pos_k = window[3 + k] * scaling
             gt_positions.append(torch.tensor(pos_k, dtype=torch.float32))
             rot_k = np.zeros((pos_k.shape[0], 4), dtype=np.float32); rot_k[:, 0] = 1.0
@@ -389,7 +396,7 @@ class MuJoCoDataset(torch.utils.data.Dataset):
         example['parent_ids'] = torch.from_numpy(parent_ids)
 
         if self.phase == 'test':
-            self._save_gt_params(example, window, geom_ids, part_ids, scaling)
+            self._save_gt_params(example, window, geom_ids, part_ids, parent_ids, scaling)
 
         return example
 
@@ -452,14 +459,17 @@ class MuJoCoDataset(torch.utils.data.Dataset):
 
     # ── test-phase GT save ────────────────────────────────────
 
-    def _save_gt_params(self, example, window, geom_ids, part_ids, scaling):
+    def _save_gt_params(self, example, window, geom_ids, part_ids, parent_ids, scaling):
+        # window is in original (metre) scale; predictions are saved at the same scale
+        # by runner._update_pred_log_using_gs_format (points * 1/scaling), so store as-is.
         output_dir = os.path.join(self.cfg['output_dir'], self.cfg['exp_name_epoch'])
         scene_dir  = os.path.join(output_dir, example['seq_name'])
         os.makedirs(scene_dir, exist_ok=True)
         np.savez(os.path.join(scene_dir, 'params_gt.npz'),
-                 means3D=window / scaling,
+                 means3D=window,
                  geom_ids=geom_ids,
-                 part_ids=part_ids)
+                 part_ids=part_ids,
+                 parent_ids=parent_ids)
 
 
 # ──────────────────────────────────────────────────────────────

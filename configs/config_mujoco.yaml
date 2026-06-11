@@ -45,7 +45,7 @@ test:
   batch_sz: 1
   view_num: 1
   num_workers: 2
-  seq_len: 600         # longer than the longest demo (586 frames)
+  seq_len: 700         # floor only; test_mujoco.py auto-raises this to cover the longest test demo
 
 dataset:
   name: mujoco_sweep
