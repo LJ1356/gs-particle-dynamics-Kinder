@@ -239,9 +239,24 @@ class MuJoCoDataset(torch.utils.data.Dataset):
 
     # ── loading ───────────────────────────────────────────────
 
+    def _data_path(self):
+        """Pick the HDF5 file for the current phase (train and test use separate files).
+
+        Falls back to a single `data_dir` if a per-phase key isn't set.
+        """
+        key = 'train' if self.phase in ('train', 'train_hem') else self.phase
+        ds = self.cfg['dataset']
+        path = ds.get(f'{key}_data_dir', ds.get('data_dir'))
+        assert path is not None, (
+            f"No data path for phase '{self.phase}': set dataset.{key}_data_dir "
+            f"(or dataset.data_dir) in the config."
+        )
+        return path
+
     def _load(self):
         first_labels = None
-        with h5py.File(self.cfg['dataset']['data_dir'], 'r') as f:
+        self.data_path = self._data_path()
+        with h5py.File(self.data_path, 'r') as f:
             for demo_name in sorted(f['data'].keys()):
                 demo = f[f'data/{demo_name}']
                 positions, geom_ids, part_ids, parent_ids, labels = self._load_demo(demo)
@@ -254,7 +269,7 @@ class MuJoCoDataset(torch.utils.data.Dataset):
                 self.all_trials.append((positions, geom_ids, part_ids, parent_ids, demo_name))
                 self.n_rollout += 1
 
-        assert self.n_rollout > 0, f'No valid demos in {self.cfg["dataset"]["data_dir"]}'
+        assert self.n_rollout > 0, f'No valid demos in {self.data_path}'
         self._print_grouping_summary(first_labels)
         self._validate_config(first_labels)
 
