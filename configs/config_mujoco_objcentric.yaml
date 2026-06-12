@@ -1,0 +1,58 @@
+exp_dir: /home/liang/claude/gs-particle-dynamics/checkpoints
+exp_name: mujoco_sweep_objcentric
+output_dir: /home/liang/claude/gs-particle-dynamics/rollout_outputs
+device: cuda
+
+model:
+  type: Interaction_PointConv
+  output_dim: 7
+  pointcloud_feat: 32
+  pred_mlp_input_feat_dim: 32
+  pred_mlp_hidden_dim: 256
+  input_frame_num: 2
+  dist_threshold: 0.15
+  soft_id: false
+  rigid_pose_fitting: true   # object-centric: fit one rigid SE(3) per object (grouping = object_id_mode)
+  pointwise_prediction: true
+  acceleration_prediction: false
+
+pointcloud:
+  input_dim: 3
+  knn: 32
+  knn_k_decay_factor: 2
+  grid_size:
+    - 0.02 # 2 cm
+    - 0.05 # 5 cm
+  scaling: 10.0
+
+train:
+  batch_sz: 4
+  view_num: 1          # dummy, no real cameras
+  frames_per_scene: 10
+  num_workers: 2
+  seq_len: 5
+  learning_rate: 0.001
+  loss_type: position  # no rendering loss — no camera images
+  hard_example_mining: false
+  warm_up_epoch: 2
+  epoch: 50
+  milestones:
+    - 23
+    - 45
+    - 50
+
+test:
+  batch_sz: 1
+  view_num: 1
+  num_workers: 2
+  seq_len: 700         # floor only; test_mujoco.py auto-raises this to cover the longest test demo
+
+dataset:
+  name: mujoco_sweep
+  train_data_dir: /home/liang/claude/kindergarden/hdf5_data/sweep_canonical_10d_nocamera_100demos_train.hdf5
+  test_data_dir: /home/liang/claude/kindergarden/hdf5_data/sweep_canonical_10d_nocamera_10demos_test.hdf5
+  gravity_axis: 2
+  object_id_mode: "part"  # options: "geom" (63 IDs), "part" (19 IDs), "parent" (9 IDs)
+  max_object_num: 19       # must match object_id_mode: part=19, parent=9, geom=63
+  camera_num: 1            # dummy — no real cameras, needed for feature dim calculation
+  pts_per_geom: 50         # subsample 500 → 50 pts/geom; 63 geoms × 50 = 3150 pts/frame
