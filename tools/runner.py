@@ -78,12 +78,17 @@ class Model_Runner(object):
             # skip if the number of input frames is fewer than a required number
             if curr_frame < self.cfg['model']['input_frame_num'] - 1: continue
 
-            # get multi-frame frame prediction   
+            # get multi-frame frame prediction
             multi_frame_input = []
             for j in range(self.cfg['model']['input_frame_num']):
-                multi_frame_input.append(single_frame_input[curr_frame - j])            
+                multi_frame_input.append(single_frame_input[curr_frame - j])
+            # per-step action for this rollout step (Alignment A): step index matches gt_pos_idx
+            action_step = None
+            if 'action' in batch_all:
+                rollout_step = curr_frame - (self.cfg['model']['input_frame_num'] - 1)
+                action_step = batch_all['action'][:, rollout_step, :]  # (B, action_dim)
             # get prediction
-            multi_frame_feats = self._run_pointconv_internaction_networks(multi_frame_input, idx_info)
+            multi_frame_feats = self._run_pointconv_internaction_networks(multi_frame_input, idx_info, action_step)
             out = self._run_prediction_heads(multi_frame_feats)
             pred = self._collect_pointwise_pred_and_gt(out, curr_batch, curr_frame, phase)
 
@@ -335,10 +340,10 @@ class Model_Runner(object):
 
         return data
 
-    def _run_pointconv_internaction_networks(self, multi_frame_input, idx_info):
-        
+    def _run_pointconv_internaction_networks(self, multi_frame_input, idx_info, action=None):
+
         recent_frame = 0
-        velocity = []        
+        velocity = []
         for frame in range(self.cfg['model']['input_frame_num']):
             velocity.append(multi_frame_input[frame]['curr_velocity'])
         velocity = torch.cat(velocity, dim=1) # [B, 8]
@@ -351,7 +356,7 @@ class Model_Runner(object):
             pc_feat.append(multi_frame_input[recent_frame]['curr_pc'][l].features_packed())
             num_points_per_cloud.append(multi_frame_input[recent_frame]['curr_pc'][l].num_points_per_cloud().tolist())
 
-        pc_feat = self.pointconv_internaction_network(velocity, pc_feat, pc, num_points_per_cloud, idx_info)
+        pc_feat = self.pointconv_internaction_network(velocity, pc_feat, pc, num_points_per_cloud, idx_info, action=action)
 
         return pc_feat
 
