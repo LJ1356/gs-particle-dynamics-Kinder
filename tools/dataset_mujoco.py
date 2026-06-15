@@ -256,6 +256,8 @@ class MuJoCoDataset(torch.utils.data.Dataset):
     def _load(self):
         first_labels = None
         self.data_path = self._data_path()
+        self.use_action = self.cfg['model'].get('use_action_conditioning', False)
+        action_key = self.cfg['model'].get('action_key', 'actions_delta_ee_base_10d')
         with h5py.File(self.data_path, 'r') as f:
             for demo_name in sorted(f['data'].keys()):
                 demo = f[f'data/{demo_name}']
@@ -266,7 +268,19 @@ class MuJoCoDataset(torch.utils.data.Dataset):
                 if T < self.frames_needed:
                     print(f'{demo_name}: {T} frames < {self.frames_needed} needed, skipping.')
                     continue
-                self.all_trials.append((positions, geom_ids, part_ids, parent_ids, demo_name))
+                actions = None
+                if self.use_action:
+                    assert action_key in demo, (
+                        f"{demo_name}: action_key '{action_key}' not found "
+                        f"(use_action_conditioning is set)."
+                    )
+                    actions = demo[action_key][:].astype(np.float32)
+                    # Alignment A: actions[t] drives state[t] -> state[t+1], so there are
+                    # T-1 valid transitions; the last action is unpaired. (See Q4.)
+                    assert actions.shape[0] == T, (
+                        f"{demo_name}: actions length {actions.shape[0]} != positions length {T}"
+                    )
+                self.all_trials.append((positions, geom_ids, part_ids, parent_ids, demo_name, actions))
                 self.n_rollout += 1
 
         assert self.n_rollout > 0, f'No valid demos in {self.data_path}'
@@ -356,7 +370,7 @@ class MuJoCoDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         trial_idx = idx % self.n_rollout
-        positions, geom_ids, part_ids, parent_ids, demo_name = self.all_trials[trial_idx]
+        positions, geom_ids, part_ids, parent_ids, demo_name, actions = self.all_trials[trial_idx]
         T = positions.shape[0]
 
         if self.phase == 'test':
@@ -404,6 +418,17 @@ class MuJoCoDataset(torch.utils.data.Dataset):
             'rotation': torch.stack(gt_rotations),
         }
         example['gt_lookahead'] = [{} for _ in range(self.lookahead_frames)]
+
+        # action conditioning (Alignment A): rollout step k predicts window[2+k] ->
+        # window[3+k], driven by actions[start + 2 + k]. The slice is num_gt long and (by
+        # construction of max_start / num_gt) never reaches the unpaired last action T-1.
+        if self.use_action:
+            action_scale = self.cfg['model'].get('action_scale', 10.0)
+            act = actions[start + 2: start + 2 + num_gt] * action_scale  # (num_gt, 10)
+            assert act.shape[0] == num_gt, (
+                f"{demo_name}: action slice len {act.shape[0]} != num_gt {num_gt}"
+            )
+            example['action'] = torch.from_numpy(act)  # (num_gt, 10) float32
 
         # metadata for debugging / per-category evaluation
         example['geom_ids']   = torch.from_numpy(geom_ids)
