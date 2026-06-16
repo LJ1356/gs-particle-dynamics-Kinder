@@ -128,6 +128,17 @@ def evaluate_scene(scene_dir):
         'chamfer': chamfer_dist(pred_final, gt_final).item(),
     }
 
+    # passive aggregate: all non-robot points (objects + static), so robot/gripper
+    # error does not hide object behaviour in the main metric.
+    robot_pid = PARENT_TO_ID.get('robot')
+    passive_mask = parent_ids != robot_pid
+    if robot_pid is not None and passive_mask.any():
+        counts, n = _delta_counts(pred_final[passive_mask], gt_final[passive_mask])
+        results['passive'] = {
+            'counts': counts, 'n': n,
+            'chamfer': chamfer_dist(pred_final[passive_mask], gt_final[passive_mask]).item(),
+        }
+
     for pid in np.unique(parent_ids):
         mask = parent_ids == pid
         p_sub = pred_final[mask]
@@ -161,8 +172,9 @@ def aggregate_and_report(scene_names, cfg):
             sum_n[group] += r['n']
             chamfers[group].append(r['chamfer'])
 
-    # ordered report: overall first, then parent groups in canonical order
-    ordered = ['overall'] + [p for p in PARENT_TO_ID if p in sum_counts]
+    # ordered report: overall, then passive aggregate, then parent groups in canonical order
+    ordered = ['overall'] + (['passive'] if 'passive' in sum_counts else []) \
+        + [p for p in PARENT_TO_ID if p in sum_counts]
 
     header = (f'{"group":<16} {"npts":>7} '
               f'{"d<5cm":>8} {"d<10cm":>8} {"d<20cm":>8} {"chamfer":>9}')
@@ -200,6 +212,9 @@ def _scene_horizon_metrics(scene_dir, horizons):
     start = gt_traj[0]
 
     groups = {'overall': np.ones(parent_ids.shape[0], dtype=bool)}
+    robot_pid = PARENT_TO_ID.get('robot')
+    if robot_pid is not None and (parent_ids != robot_pid).any():
+        groups['passive'] = (parent_ids != robot_pid)
     for pid in np.unique(parent_ids):
         groups[ID_TO_PARENT.get(int(pid), f'parent_{pid}')] = (parent_ids == pid)
 
@@ -248,7 +263,8 @@ def report_horizons(scene_names, cfg, horizons):
 
     header = (f'{"Horizon":<16}{"d<5cm":>8}{"d<10cm":>9}{"d<20cm":>9}'
               f'{"Chamfer":>10}{"GT motion":>11}')
-    ordered = ['overall'] + [p for p in PARENT_TO_ID if p in per_group_h]
+    ordered = ['overall'] + (['passive'] if 'passive' in per_group_h else []) \
+        + [p for p in PARENT_TO_ID if p in per_group_h]
     lines = ['', f'Horizon-resolved metrics per group (mean over {len(scene_names)} held-out scenes)']
     for g in ordered:
         lines += ['', f'[{g}]', header, '-' * len(header)]

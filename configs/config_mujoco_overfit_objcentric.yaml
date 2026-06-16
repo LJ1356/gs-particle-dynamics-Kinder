@@ -1,5 +1,5 @@
 exp_dir: /home/liang/claude/gs-particle-dynamics/checkpoints
-exp_name: mujoco_sweep_overfit_objcentric
+exp_name: mujoco_sweep_overfit_objcentric_gripper
 output_dir: /home/liang/claude/gs-particle-dynamics/rollout_outputs
 device: cuda
 
@@ -59,3 +59,6 @@ dataset:
   max_object_num: 19
   camera_num: 1
   pts_per_geom: 50
+  robot_geometry_scope: gripper_only   # keep only gripper finger contact pads (~400 pts);
+                                       # full_arm = original 2300-pt robot. Default keep =
+                                       # _GRIPPER_PAD_GEOMS; override with keep_robot_geoms.

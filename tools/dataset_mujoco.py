@@ -111,6 +111,17 @@ PARENT_TO_ID = {p: i for i, p in enumerate(_PARENT_ORDER)}
 NUM_PARTS    = len(PART_TO_ID)    # 19
 NUM_PARENTS  = len(PARENT_TO_ID)  # 9
 
+# robot_geometry_scope=gripper_only keeps a subset of robot geometry. Two mechanisms:
+#   keep_robot_geoms  – explicit geom names (fine-grained; e.g. the finger contact pads)
+#   keep_robot_parts  – coarser part-name list (fallback); aliases map friendly names.
+_ROBOT_PART_ALIASES = {'gripper_body': 'gripper_palm', 'gripper': 'gripper_palm'}
+_DEFAULT_KEEP_ROBOT_PARTS = ['gripper_palm', 'left_finger', 'right_finger']
+# finger contact pads only (~400 pts): the silicone/pad surfaces that actually touch objects.
+_GRIPPER_PAD_GEOMS = [
+    'robot_right_pad1_geom170', 'robot_right_pad2_geom171', 'pad_geom172', 'silicone_pad_geom173',
+    'robot_left_pad1_geom182',  'robot_left_pad2_geom183',  'pad_geom184', 'silicone_pad_geom185',
+]
+
 
 def _match_part(name):
     """Return (part_name, parent_name, category, constraint) or None if unrecognised."""
@@ -293,6 +304,29 @@ class MuJoCoDataset(torch.utils.data.Dataset):
         rng = np.random.default_rng(seed=42)
 
         included = [gk for gk in geom_keys if classify_geom(gk) is not None]
+
+        scope = self.cfg['dataset'].get('robot_geometry_scope', 'full_arm')
+        if scope == 'gripper_only':
+            keep_geoms = self.cfg['dataset'].get('keep_robot_geoms')
+            keep_parts_cfg = self.cfg['dataset'].get('keep_robot_parts')
+            if keep_geoms is None and keep_parts_cfg is None:
+                keep_geoms = _GRIPPER_PAD_GEOMS   # default scope = finger contact pads (~400 pts)
+            if keep_geoms is not None:
+                keep_geoms = set(keep_geoms)
+                _keep_robot = lambda gk: gk in keep_geoms          # noqa: E731
+            else:
+                keep_parts = {_ROBOT_PART_ALIASES.get(k, k) for k in keep_parts_cfg}
+                _keep_robot = lambda gk: (_match_part(gk) or ('',))[0] in keep_parts  # noqa: E731
+            _is_robot = lambda gk: (_match_part(gk) or ('', ''))[1] == 'robot'  # noqa: E731
+            included = [gk for gk in included if (not _is_robot(gk)) or _keep_robot(gk)]
+            n_robot = sum(_is_robot(gk) for gk in included)
+            assert n_robot > 0, (
+                "robot_geometry_scope=gripper_only kept 0 robot geoms — check "
+                "dataset.keep_robot_geoms / keep_robot_parts against the HDF5 geom names."
+            )
+        elif scope != 'full_arm':
+            raise ValueError(f"unknown robot_geometry_scope '{scope}' (use full_arm|gripper_only)")
+
         labels, unassigned = assign_hierarchical_labels(included)
         if unassigned:
             print(f'  WARNING: {len(unassigned)} unassigned geoms: {unassigned}')
