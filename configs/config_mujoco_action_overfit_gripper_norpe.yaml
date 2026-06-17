@@ -26,7 +26,7 @@ model:
   action_scale: 10.0
   action_inject_blocks: [0]                # 0 = paper Block 4 (object_modeling idx 3); [0,1] for 4+5
   action_attention_num_heads: 4
-  action_use_gamma: true                   # zero-init residual gate; set false for plain residual
+  action_use_gamma: false                   # zero-init residual gate; set false for plain residual
   action_use_rpe: false                    # NO RPE (baseline for the RPE A/B)
 
 pointcloud:
