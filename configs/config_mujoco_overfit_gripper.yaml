@@ -19,6 +19,7 @@ model:
   rigid_pose_fitting: false  # per-point prediction (no rigid pose fitting)
   pointwise_prediction: true
   acceleration_prediction: false
+  action_use_gamma: true                   # true: x + gamma*attn (gamma init 0); false: x + attn (standard residual)
 
 pointcloud:
   input_dim: 3

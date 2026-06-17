@@ -18,13 +18,15 @@ class ActionCrossAttention(nn.Module):
     """Segmented per-cloud action cross-attention for the [1, total_points, C] layout.
 
     Each cloud's points (queries) attend only to that cloud's [register, action] tokens,
-    so action information never leaks across clouds concatenated in the same batch. A
-    zero-init residual gate (gamma) makes the block an identity at initialization, so
-    enabling conditioning does not perturb a trained/baseline checkpoint at step 0.
+    so action information never leaks across clouds concatenated in the same batch.
+
+    use_gamma=True:  x_out = x + gamma * attn(norm(x), norm(kv))   (gamma init 0)
+    use_gamma=False: x_out = x + attn(norm(x), norm(kv))            (standard residual)
     """
 
-    def __init__(self, dim, action_dim=10, num_heads=4, dropout=0.0):
+    def __init__(self, dim, action_dim=10, num_heads=4, dropout=0.0, use_gamma=True):
         super().__init__()
+        self.use_gamma = use_gamma
         self.action_enc = nn.Sequential(
             nn.Linear(action_dim, dim),
             nn.GELU(),
@@ -35,7 +37,8 @@ class ActionCrossAttention(nn.Module):
         self.norm_q = nn.LayerNorm(dim)
         self.norm_kv = nn.LayerNorm(dim)
         self.attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
-        self.gamma = nn.Parameter(torch.zeros(1))
+        if use_gamma:
+            self.gamma = nn.Parameter(torch.zeros(1))
 
     def forward(self, features, counts, action):
         # features: [1, total_points, dim] (one bottleneck level, all clouds concatenated)
@@ -55,7 +58,10 @@ class ActionCrossAttention(nn.Module):
             ctx = torch.cat([self.register_token, act_tokens[b:b + 1]], dim=1)  # [1, 2, dim]
             kv = self.norm_kv(ctx)
             upd, _ = self.attn(self.norm_q(f_b), kv, kv, need_weights=False)
-            outs.append(f_b + self.gamma * upd)
+            if self.use_gamma:
+                outs.append(f_b + self.gamma * upd)
+            else:
+                outs.append(f_b + upd)
         return torch.cat(outs, dim=1)
 
 
@@ -80,6 +86,7 @@ def build_pointconv_interaction_nets(cfg, phase):
             action_dim=cfg['model'].get('action_dim', 10),
             action_inject_blocks=cfg['model'].get('action_inject_blocks', [0]),
             action_num_heads=cfg['model'].get('action_attention_num_heads', 4),
+            use_gamma=cfg['model'].get('action_use_gamma', True),
         )
     else:
         raise NotImplementedError
@@ -137,6 +144,7 @@ class Interaction_PointConv(nn.Module):
         action_dim=10,
         action_inject_blocks=(0,),
         action_num_heads=4,
+        use_gamma=True,
     ):
         super(Interaction_PointConv, self).__init__()
         self.knn = knn
@@ -198,7 +206,8 @@ class Interaction_PointConv(nn.Module):
                 )
                 self.action_inject_layers.add(layer_idx)
                 self.action_cross_attn[str(layer_idx)] = ActionCrossAttention(
-                    bottleneck_dim, action_dim=action_dim, num_heads=action_num_heads
+                    bottleneck_dim, action_dim=action_dim, num_heads=action_num_heads,
+                    use_gamma=use_gamma,
                 )
 
         # upsampling interaction blocks
