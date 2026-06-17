@@ -65,6 +65,68 @@ class ActionCrossAttention(nn.Module):
         return torch.cat(outs, dim=1)
 
 
+class ActionCrossAttentionWithRPE(nn.Module):
+    """Segmented per-cloud action cross-attention with relative positional encoding.
+
+    Same as ActionCrossAttention, but each scene point's attention to the *action* token is
+    modulated by a per-head bias from its position relative to the tool-center-point:
+    rel = scene_xyz - tcp_xyz (both in the model's scaled coords). The register/no-op token
+    gets zero positional bias. Segmented per-cloud: each cloud uses its own action + TCP.
+    """
+
+    def __init__(self, dim, action_dim=10, num_heads=4, dropout=0.0, use_gamma=True, rpe_hidden=64):
+        super().__init__()
+        self.num_heads = num_heads
+        self.use_gamma = use_gamma
+        self.action_enc = nn.Sequential(
+            nn.Linear(action_dim, dim),
+            nn.GELU(),
+            nn.Linear(dim, dim),
+        )
+        self.register_token = nn.Parameter(torch.zeros(1, 1, dim))
+        nn.init.normal_(self.register_token, std=0.02)
+        self.norm_q = nn.LayerNorm(dim)
+        self.norm_kv = nn.LayerNorm(dim)
+        self.attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
+        # relative xyz (scene - tcp) -> per-head additive logit bias for the action token
+        self.rpe_mlp = nn.Sequential(
+            nn.Linear(3, rpe_hidden),
+            nn.GELU(),
+            nn.Linear(rpe_hidden, num_heads),
+        )
+        if use_gamma:
+            self.gamma = nn.Parameter(torch.zeros(1))
+
+    def forward(self, features, xyz, counts, action, tcp_xyz):
+        # features: [1, total_points, dim]   xyz: [1, total_points, 3] (scaled coords)
+        # counts:   list[int] per-cloud point counts   action: [B, action_dim]
+        # tcp_xyz:  [B, 3] per-cloud tool-center-point (scaled), same order as counts
+        assert features.dim() == 3 and features.shape[0] == 1
+        assert len(counts) == action.shape[0] == tcp_xyz.shape[0], (
+            f"counts ({len(counts)}), action ({action.shape[0]}) and tcp_xyz "
+            f"({tcp_xyz.shape[0]}) must all be num_clouds"
+        )
+        act_tokens = self.action_enc(action).unsqueeze(1)  # [B, 1, dim]
+        feat_chunks = torch.split(features, counts, dim=1)
+        xyz_chunks = torch.split(xyz, counts, dim=1)
+        outs = []
+        for b, (f_b, x_b) in enumerate(zip(feat_chunks, xyz_chunks)):  # [1, n_b, *]
+            if f_b.shape[1] == 0:
+                outs.append(f_b)
+                continue
+            ctx = torch.cat([self.register_token, act_tokens[b:b + 1]], dim=1)  # [1, 2, dim]
+            kv = self.norm_kv(ctx)
+            rel = x_b - tcp_xyz[b].view(1, 1, 3)            # [1, n_b, 3]
+            rpe = self.rpe_mlp(rel).squeeze(0)              # [n_b, num_heads]
+            # additive attention bias: [num_heads, n_b, 2]; col 0 = register (0), col 1 = action
+            n = f_b.shape[1]
+            attn_mask = torch.zeros(self.num_heads, n, 2, device=f_b.device, dtype=f_b.dtype)
+            attn_mask[:, :, 1] = rpe.transpose(0, 1)
+            upd, _ = self.attn(self.norm_q(f_b), kv, kv, attn_mask=attn_mask, need_weights=False)
+            outs.append(f_b + self.gamma * upd if self.use_gamma else f_b + upd)
+        return torch.cat(outs, dim=1)
+
+
 def build_pointconv_interaction_nets(cfg, phase):
 
     if cfg['model']['type'] == 'Interaction_PointConv':
@@ -87,6 +149,8 @@ def build_pointconv_interaction_nets(cfg, phase):
             action_inject_blocks=cfg['model'].get('action_inject_blocks', [0]),
             action_num_heads=cfg['model'].get('action_attention_num_heads', 4),
             use_gamma=cfg['model'].get('action_use_gamma', True),
+            action_use_rpe=cfg['model'].get('action_use_rpe', False),
+            action_rpe_hidden=cfg['model'].get('action_rpe_hidden', 64),
         )
     else:
         raise NotImplementedError
@@ -145,6 +209,8 @@ class Interaction_PointConv(nn.Module):
         action_inject_blocks=(0,),
         action_num_heads=4,
         use_gamma=True,
+        action_use_rpe=False,
+        action_rpe_hidden=64,
     ):
         super(Interaction_PointConv, self).__init__()
         self.knn = knn
@@ -194,6 +260,7 @@ class Interaction_PointConv(nn.Module):
         # blocks are [block_num+1 .. 2*block_num]; action_inject_blocks selects which ones
         # (0 = paper Block 4 = first bottleneck block, 1 = Block 5 = second).
         self.use_action_conditioning = use_action_conditioning
+        self.action_use_rpe = action_use_rpe
         self.action_inject_layers = set()
         self.action_cross_attn = nn.ModuleDict()
         if use_action_conditioning:
@@ -205,10 +272,16 @@ class Interaction_PointConv(nn.Module):
                     f"outside the bottleneck range [{first_bottleneck_layer}, {2 * self.block_num}]"
                 )
                 self.action_inject_layers.add(layer_idx)
-                self.action_cross_attn[str(layer_idx)] = ActionCrossAttention(
-                    bottleneck_dim, action_dim=action_dim, num_heads=action_num_heads,
-                    use_gamma=use_gamma,
-                )
+                if action_use_rpe:
+                    self.action_cross_attn[str(layer_idx)] = ActionCrossAttentionWithRPE(
+                        bottleneck_dim, action_dim=action_dim, num_heads=action_num_heads,
+                        use_gamma=use_gamma, rpe_hidden=action_rpe_hidden,
+                    )
+                else:
+                    self.action_cross_attn[str(layer_idx)] = ActionCrossAttention(
+                        bottleneck_dim, action_dim=action_dim, num_heads=action_num_heads,
+                        use_gamma=use_gamma,
+                    )
 
         # upsampling interaction blocks
         for _ in range(self.block_num):
@@ -219,10 +292,13 @@ class Interaction_PointConv(nn.Module):
         # last interaction block without upsampling (no relational conv in the last block)
         self.object_modeling.append(Object_PointConv(unet_feature_dim, unet_feature_dim))
 
-    def forward(self, xyz_delta, xyz_feat, xyz_sets, num_points_per_cloud, idx_info, action=None):
+    def forward(self, xyz_delta, xyz_feat, xyz_sets, num_points_per_cloud, idx_info, action=None,
+                tcp_xyz=None):
 
         assert len(xyz_feat) == len(xyz_sets)
         assert len(num_points_per_cloud) == len(xyz_sets)
+        if self.use_action_conditioning and self.action_use_rpe:
+            assert tcp_xyz is not None, "action_use_rpe is set but tcp_xyz is None"
         if self.use_action_conditioning:
             assert action is not None, "use_action_conditioning is set but action is None"
 
@@ -362,9 +438,14 @@ class Interaction_PointConv(nn.Module):
             # inject action after this bottleneck block's relational conv; the next
             # bottleneck/decoder relational conv then propagates it across objects.
             if self.use_action_conditioning and layer in self.action_inject_layers:
-                features = self.action_cross_attn[str(layer)](
-                    features, num_points_per_cloud[ct], action
-                )
+                if self.action_use_rpe:
+                    features = self.action_cross_attn[str(layer)](
+                        features, xyz_sets_obj_conv[ct], num_points_per_cloud[ct], action, tcp_xyz
+                    )
+                else:
+                    features = self.action_cross_attn[str(layer)](
+                        features, num_points_per_cloud[ct], action
+                    )
             layer += 1
 
         # upsampling interaction blocks

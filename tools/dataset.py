@@ -725,9 +725,11 @@ def collate_fn(data):
     batch['gt'] = all_gt
     batch['gt_lookahead'] = all_gt_lookahead
 
-    # per-step action, stacked in the same cloud order as the concatenated point clouds
+    # per-step action (and TCP for RPE), stacked in the same cloud order as the point clouds
     if 'action' in data[0]:
         batch['action'] = torch.stack([d['action'] for d in data], dim=0)  # (B, num_gt, 10)
+    if 'tcp_xyz' in data[0]:
+        batch['tcp_xyz'] = torch.stack([d['tcp_xyz'] for d in data], dim=0)  # (B, num_gt, 3)
 
     # get mullti-frame info here
     batch['pc'] = {}
@@ -885,7 +887,7 @@ def move_to_gpu(tensor_dict, device):
     for key1 in tensor_dict.keys():
         if key1 in ['seq_name', 'start_frame']:
             tensors_out[key1] = tensor_dict[key1]
-        elif key1 == 'action':
+        elif key1 in ('action', 'tcp_xyz'):
             tensors_out[key1] = tensor_dict[key1].to(device)
         elif key1 == 'inv_rot':
             tensors_out[key1] = []

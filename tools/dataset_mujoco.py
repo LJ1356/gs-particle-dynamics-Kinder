@@ -268,6 +268,7 @@ class MuJoCoDataset(torch.utils.data.Dataset):
         first_labels = None
         self.data_path = self._data_path()
         self.use_action = self.cfg['model'].get('use_action_conditioning', False)
+        self.use_rpe = self.use_action and self.cfg['model'].get('action_use_rpe', False)
         action_key = self.cfg['model'].get('action_key', 'actions_delta_ee_base_10d')
         with h5py.File(self.data_path, 'r') as f:
             for demo_name in sorted(f['data'].keys()):
@@ -291,7 +292,18 @@ class MuJoCoDataset(torch.utils.data.Dataset):
                     assert actions.shape[0] == T, (
                         f"{demo_name}: actions length {actions.shape[0]} != positions length {T}"
                     )
-                self.all_trials.append((positions, geom_ids, part_ids, parent_ids, demo_name, actions))
+                tcp = None
+                if self.use_rpe:
+                    # TCP proxy = end-effector translation; scaled in __getitem__ to match coords.
+                    assert 'obs' in demo and 'ee_pose' in demo['obs'], (
+                        f"{demo_name}: obs/ee_pose not found (action_use_rpe needs the TCP source)."
+                    )
+                    tcp = demo['obs']['ee_pose'][:, :3, 3].astype(np.float32)  # (T, 3)
+                    assert tcp.shape[0] == T, (
+                        f"{demo_name}: ee_pose length {tcp.shape[0]} != positions length {T}"
+                    )
+                self.all_trials.append(
+                    (positions, geom_ids, part_ids, parent_ids, demo_name, actions, tcp))
                 self.n_rollout += 1
 
         assert self.n_rollout > 0, f'No valid demos in {self.data_path}'
@@ -404,7 +416,7 @@ class MuJoCoDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         trial_idx = idx % self.n_rollout
-        positions, geom_ids, part_ids, parent_ids, demo_name, actions = self.all_trials[trial_idx]
+        positions, geom_ids, part_ids, parent_ids, demo_name, actions, tcp = self.all_trials[trial_idx]
         T = positions.shape[0]
 
         if self.phase == 'test':
@@ -463,6 +475,11 @@ class MuJoCoDataset(torch.utils.data.Dataset):
                 f"{demo_name}: action slice len {act.shape[0]} != num_gt {num_gt}"
             )
             example['action'] = torch.from_numpy(act)  # (num_gt, 10) float32
+            if self.use_rpe:
+                # TCP at the current state of each transition (Alignment A), scaled to match
+                # the point coords (positions are *scaling in build below).
+                tcp_win = tcp[start + 2: start + 2 + num_gt] * scaling  # (num_gt, 3)
+                example['tcp_xyz'] = torch.from_numpy(tcp_win)
 
         # metadata for debugging / per-category evaluation
         example['geom_ids']   = torch.from_numpy(geom_ids)
